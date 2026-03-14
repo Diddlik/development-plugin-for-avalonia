@@ -37,12 +37,14 @@ TYPE_DECL_RE = re.compile(
 
 NAMESPACE_RE = re.compile(r"^\s*namespace\s+([A-Za-z_][A-Za-z0-9_.]*)\s*[;{]")
 PUBLIC_RE = re.compile(r"^\s*public\s+")
+ACCESS_MODIFIER_RE = re.compile(r"^\s*(public|internal|private|protected)\b")
 
 
 @dataclass
 class TypeScope:
     name: str
     is_public: bool
+    is_interface: bool
     brace_depth: int
 
 
@@ -117,6 +119,15 @@ def area_for(rel: str) -> str:
     return "Other"
 
 
+def is_implicit_interface_member_start(line: str, scope: TypeScope | None) -> bool:
+    if scope is None or not (scope.is_public and scope.is_interface):
+        return False
+    stripped = line.lstrip()
+    if stripped.startswith("[") or stripped.startswith("public:"):
+        return False
+    return ACCESS_MODIFIER_RE.match(line) is None
+
+
 def extract_signatures(path: pathlib.Path) -> tuple[str | None, list[str]]:
     namespace: str | None = None
     in_block = False
@@ -144,7 +155,15 @@ def extract_signatures(path: pathlib.Path) -> tuple[str | None, list[str]]:
 
         if pending_type is not None and "{" in clean:
             t_name, t_public = pending_type
-            type_stack.append(TypeScope(name=t_name, is_public=t_public, brace_depth=depth + 1))
+            t_kind = t_name.split(" ", 1)[0]
+            type_stack.append(
+                TypeScope(
+                    name=t_name,
+                    is_public=t_public,
+                    is_interface=t_kind == "interface",
+                    brace_depth=depth + 1,
+                )
+            )
             pending_type = None
 
         type_match = TYPE_DECL_RE.match(line)
@@ -160,18 +179,26 @@ def extract_signatures(path: pathlib.Path) -> tuple[str | None, list[str]]:
                 signatures.append(normalize_signature(line))
 
             if "{" in clean:
-                type_stack.append(TypeScope(name=f"{kind} {name}", is_public=is_public, brace_depth=depth + 1))
+                type_stack.append(
+                    TypeScope(
+                        name=f"{kind} {name}",
+                        is_public=is_public,
+                        is_interface=kind == "interface",
+                        brace_depth=depth + 1,
+                    )
+                )
             else:
                 pending_type = (f"{kind} {name}", is_public)
 
-        innermost_public = type_stack[-1].is_public if type_stack else False
-        member_depth = type_stack[-1].brace_depth if type_stack else -1
+        current_scope = type_stack[-1] if type_stack else None
+        innermost_public = current_scope.is_public if current_scope else False
+        member_depth = current_scope.brace_depth if current_scope else -1
 
         if pending_sig is None:
             if (
                 innermost_public
                 and depth == member_depth
-                and PUBLIC_RE.match(line)
+                and (PUBLIC_RE.match(line) or is_implicit_interface_member_start(line, current_scope))
                 and not is_type_decl
                 and not line.lstrip().startswith("public:")
             ):

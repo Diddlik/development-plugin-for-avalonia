@@ -40,12 +40,13 @@ DEFAULT_PATTERNS = ["src/**/*.cs"]
 TYPE_START_RE = re.compile(
     r"^\s*(public|internal|private|protected)\s+"
     r"(?:new\s+|unsafe\s+|abstract\s+|sealed\s+|static\s+|partial\s+|readonly\s+|ref\s+)*"
-    r"(?:class|interface|struct|enum|record(?:\s+class|\s+struct)?)\b"
+    r"(class|interface|struct|enum|record(?:\s+class|\s+struct)?)\b"
 )
 DELEGATE_START_RE = re.compile(
     r"^\s*(public|internal|private|protected)\s+"
     r"(?:new\s+|unsafe\s+|static\s+|partial\s+|readonly\s+|ref\s+)*delegate\b"
 )
+ACCESS_MODIFIER_RE = re.compile(r"^\s*(public|internal|private|protected)\b")
 TARGET_KIND_LABELS = {
     "T": "type",
     "M": "method/member",
@@ -68,6 +69,7 @@ DIAGNOSTIC_LABELS = {
 class TypeScope:
     name: str
     is_public: bool
+    is_interface: bool
     brace_depth: int
 
 
@@ -180,6 +182,14 @@ def append_api_item(
     )
 
 
+def is_implicit_interface_member_start(line: str, stripped: str, scope: TypeScope | None) -> bool:
+    if scope is None or not (scope.is_public and scope.is_interface):
+        return False
+    if stripped.startswith("[") or stripped.startswith("public:"):
+        return False
+    return ACCESS_MODIFIER_RE.match(line) is None
+
+
 def extract_api_items(repo: pathlib.Path, path: pathlib.Path) -> list[ApiItem]:
     items: list[ApiItem] = []
     namespace: str | None = None
@@ -235,6 +245,7 @@ def extract_api_items(repo: pathlib.Path, path: pathlib.Path) -> list[ApiItem]:
                         TypeScope(
                             name=symbol,
                             is_public=is_public,
+                            is_interface=bool(type_start and type_start.group(2) == "interface"),
                             brace_depth=depth + 1,
                         )
                     )
@@ -245,8 +256,10 @@ def extract_api_items(repo: pathlib.Path, path: pathlib.Path) -> list[ApiItem]:
 
             if type_start or delegate_start:
                 access = (type_start or delegate_start).group(1)
+                is_interface = bool(type_start and type_start.group(2) == "interface")
                 pending_type = {
                     "access": access,
+                    "is_interface": is_interface,
                     "parts": [line],
                     "clean_parts": [clean],
                     "namespace": namespace,
@@ -278,19 +291,21 @@ def extract_api_items(repo: pathlib.Path, path: pathlib.Path) -> list[ApiItem]:
                             TypeScope(
                                 name=symbol,
                                 is_public=is_public,
+                                is_interface=bool(pending_type["is_interface"]),
                                 brace_depth=depth + 1,
                             )
                         )
                     pending_type = None
             else:
-                innermost_public = type_stack[-1].is_public if type_stack else False
-                member_depth = type_stack[-1].brace_depth if type_stack else -1
+                current_scope = type_stack[-1] if type_stack else None
+                innermost_public = current_scope.is_public if current_scope else False
+                member_depth = current_scope.brace_depth if current_scope else -1
 
                 if pending_sig is None:
                     if (
                         innermost_public
                         and depth == member_depth
-                        and PUBLIC_RE.match(line)
+                        and (PUBLIC_RE.match(line) or is_implicit_interface_member_start(line, stripped, current_scope))
                         and not stripped.startswith("public:")
                     ):
                         container_names = tuple(scope.name for scope in type_stack if scope.is_public)
@@ -509,10 +524,15 @@ def main() -> int:
         print(f"error: invalid repo path: {repo}", file=sys.stderr)
         return 2
 
+    from_cleanup = lambda: None
+    to_cleanup = lambda: None
+
     try:
         from_repo, _, from_cleanup = prepare_scan_repo(repo, args.from_ref)
         to_repo, _, to_cleanup = prepare_scan_repo(repo, args.to_ref)
     except RuntimeError as ex:
+        from_cleanup()
+        to_cleanup()
         print(f"error: {ex}", file=sys.stderr)
         return 4
 

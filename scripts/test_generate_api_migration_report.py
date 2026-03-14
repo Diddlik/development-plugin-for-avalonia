@@ -1,14 +1,19 @@
+import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.generate_api_migration_report import (
     ApiItem,
     build_added_api_section,
+    extract_api_items,
+    main,
     normalize_target_name,
     parse_suppressions,
 )
+from scripts.generate_api_index import extract_signatures
 
 
 class GenerateApiMigrationReportTests(unittest.TestCase):
@@ -72,6 +77,96 @@ class GenerateApiMigrationReportTests(unittest.TestCase):
             "- `AppBuilder` -> `public string? TextShapingSubsystemName { get; private set; }`",
             lines,
         )
+
+    def test_extract_api_items_includes_implicit_interface_members(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            path = repo / "src" / "Sample.cs"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                textwrap.dedent(
+                    """\
+                    namespace Sample;
+
+                    public interface IFoo
+                    {
+                        void Execute();
+                        string Name { get; }
+                        event EventHandler? Changed;
+                        private void Hidden() { }
+                    }
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            items = extract_api_items(repo, path)
+
+        signatures = {item.signature for item in items}
+        self.assertIn("void Execute();", signatures)
+        self.assertIn("string Name { get; }", signatures)
+        self.assertIn("event EventHandler? Changed;", signatures)
+        self.assertNotIn("private void Hidden() { }", signatures)
+
+    def test_extract_signatures_includes_implicit_interface_members(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "Sample.cs"
+            path.write_text(
+                textwrap.dedent(
+                    """\
+                    namespace Sample;
+
+                    public interface IFoo
+                    {
+                        void Execute();
+                        string Name { get; }
+                    }
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            _, signatures = extract_signatures(path)
+
+        self.assertIn("void Execute();", signatures)
+        self.assertIn("string Name { get; }", signatures)
+
+    def test_main_cleans_up_first_worktree_if_second_ref_setup_fails(self) -> None:
+        cleanup_calls: list[str] = []
+
+        def cleanup_first() -> None:
+            cleanup_calls.append("from")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            output = repo / "report.md"
+
+            argv = [
+                "generate_api_migration_report.py",
+                "--repo",
+                str(repo),
+                "--from-ref",
+                "good-ref",
+                "--to-ref",
+                "bad-ref",
+                "--output",
+                str(output),
+            ]
+
+            with (
+                patch.object(sys, "argv", argv),
+                patch(
+                    "scripts.generate_api_migration_report.prepare_scan_repo",
+                    side_effect=[
+                        (repo, "good-ref", cleanup_first),
+                        RuntimeError("unknown ref: bad-ref"),
+                    ],
+                ),
+            ):
+                exit_code = main()
+
+        self.assertEqual(exit_code, 4)
+        self.assertEqual(cleanup_calls, ["from"])
 
 
 if __name__ == "__main__":

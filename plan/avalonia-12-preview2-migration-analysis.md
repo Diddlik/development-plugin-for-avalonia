@@ -25,9 +25,9 @@ Generated artifacts for this update:
 ## Quantitative Summary
 
 - official compatibility suppressions: `536`
-- added public signatures in preview2: `956`
-- removed public signatures in parser view: `676`
-- preview public signatures indexed: `10279`
+- added public signatures in preview2: `1051`
+- removed public signatures in parser view: `827`
+- preview public signatures indexed: `11491`
 
 Breaking-change suppressions by package:
 
