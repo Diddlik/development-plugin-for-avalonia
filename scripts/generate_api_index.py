@@ -27,6 +27,7 @@ DEFAULT_PATTERNS = [
     "build/**/*.props",
     "build/**/*.targets",
 ]
+DEFAULT_MAX_PER_FILE = 300
 
 TYPE_DECL_RE = re.compile(
     r"^\s*(public|internal|private|protected)\s+"
@@ -214,6 +215,10 @@ def write_markdown(
     git_ref: str | None = None,
 ) -> tuple[int, int]:
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    try:
+        output_label = output.relative_to(pathlib.Path.cwd()).as_posix()
+    except ValueError:
+        output_label = output.as_posix()
 
     by_area: dict[str, list[tuple[str, str | None, list[str]]]] = {}
     total_sigs = 0
@@ -247,7 +252,9 @@ def write_markdown(
     regen_cmd = "python3 scripts/generate_api_index.py --repo <path-to-avalonia-repo>"
     if git_ref:
         regen_cmd += f" --git-ref {git_ref}"
-    regen_cmd += " --output references/api-index-generated.md"
+    regen_cmd += f" --output {output_label}"
+    if max_per_file != DEFAULT_MAX_PER_FILE:
+        regen_cmd += f" --max-per-file {max_per_file}"
     lines.append("```bash")
     lines.append(regen_cmd)
     lines.append("```")
@@ -310,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-per-file",
         type=int,
-        default=300,
+        default=DEFAULT_MAX_PER_FILE,
         help="Maximum signatures to print per file before truncation note.",
     )
     return parser

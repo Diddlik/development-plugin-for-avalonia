@@ -387,7 +387,13 @@ def main() -> int:
         print(f"error: references directory not found: {references_dir}", file=sys.stderr)
         return 1
 
-    exclude_patterns = ["api-index-generated.md", "api-coverage-*.md", *args.exclude]
+    exclude_patterns = [
+        "api-index-generated.md",
+        "api-index-*-generated.md",
+        "api-coverage-*.md",
+        "*-breaking-changes-and-new-api-catalog.md",
+        *args.exclude,
+    ]
     entries = parse_api_index(index_path)
     docs, corpus = load_reference_docs(
         references_dir=references_dir,
