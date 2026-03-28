@@ -8,7 +8,7 @@ Primary goals:
 - keep guidance accurate to the pinned Avalonia release,
 - split broad Avalonia guidance into granular, reusable skills,
 - keep app-development references shared instead of duplicated across skills,
-- maintain clear navigation across `.agents/skills/development-plugin-for-avalonia/SKILL.md`, `SKILL.md`, `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json`, `skills/*/SKILL.md`, `README.md`, and `references/`.
+- maintain clear navigation across `.agents/skills/development-plugin-for-avalonia/SKILL.md`, `SKILL.md`, `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json`, `skills/*/SKILL.md`, `.claude/agents/`, `CLAUDE.md`, `README.md`, and `references/`.
 
 ## Source of Truth
 
@@ -44,10 +44,14 @@ python3 scripts/generate_api_index.py \
 - Repo-local skill entrypoints live under `.agents/skills/<skill-name>/`.
 - Repo marketplace metadata lives under `.agents/plugins/marketplace.json`.
 - Specialist skills live under `skills/<skill-name>/`.
+- Claude Code sub-agents live under `.claude/agents/<skill-name>.md`.
 - Keep skill names lower-case hyphen-case.
 - Each discovered skill entrypoint should have:
   - `SKILL.md`
   - `agents/openai.yaml`
+- Each Claude Code agent file (`.claude/agents/<skill-name>.md`) should have:
+  - YAML frontmatter with `name` and `description` matching the corresponding `SKILL.md`
+  - Body content mirroring the `SKILL.md` body, with paths relative to the repo root (e.g. `references/...` instead of `../../references/...`)
 - Keep the repo-local wrapper thin and route into the canonical umbrella workflow or focused plugin skills.
 - Keep `SKILL.md` bodies short and route to shared references instead of copying large content into each skill.
 - Put trigger conditions in frontmatter descriptions, not in long body sections.
@@ -58,6 +62,8 @@ python3 scripts/generate_api_index.py \
   - `SKILL.md`
   - `.codex-plugin/plugin.json` if bundle paths or install-surface metadata change
   - `.agents/plugins/marketplace.json` if the plugin path or marketplace presentation changes
+  - `.claude/agents/<skill-name>.md` (create, rename, or remove the corresponding Claude Code agent)
+  - `CLAUDE.md` skill table
   - `README.md`
   - any other skill that routes to it
 
@@ -114,10 +120,11 @@ Before finalizing changes:
 1. Verify repo-local, root, and specialist skill routing still matches the current skill catalog.
 2. Verify plugin manifest paths, branding assets, and legal links still resolve from `.codex-plugin/plugin.json`.
 3. Verify repo marketplace metadata still points at the intended plugin root and uses a marketplace identity distinct from the plugin identity.
-4. Verify new or renamed skills are reflected in `README.md` and any routing skill that mentions them.
-5. Verify examples use APIs available in Avalonia `11.3.12` unless the skill explicitly targets the Avalonia 12 lane.
-6. Re-run coverage tooling when API-focused references changed.
-7. Ensure no accidental drift to `master`-only APIs.
+4. Verify new or renamed skills are reflected in `README.md`, `CLAUDE.md`, and any routing skill that mentions them.
+5. Verify `.claude/agents/` has a corresponding agent file for each skill, with repo-root-relative reference paths.
+6. Verify examples use APIs available in Avalonia `11.3.12` unless the skill explicitly targets the Avalonia 12 lane.
+7. Re-run coverage tooling when API-focused references changed.
+8. Ensure no accidental drift to `master`-only APIs.
 
 ## Commits
 
