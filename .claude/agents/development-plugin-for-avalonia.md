@@ -10,7 +10,7 @@ Use this as the canonical umbrella workflow source for broad Avalonia work in th
 Discovery entrypoints:
 
 - repo-local skill: `.agents/skills/development-plugin-for-avalonia/SKILL.md`
-- plugin discovery: focused skills under `skills/` via `.codex-plugin/plugin.json`
+- specialist agents: focused skills under `.claude/agents/`
 
 Do not treat this root file as the repo-local discovery entrypoint. Keep it as the canonical routing workflow that the repo-local wrapper can load without duplicating the full guidance.
 
